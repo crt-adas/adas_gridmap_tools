@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(beginner_tutorials)
+project(adas_gridmap_tools)
 
+set(CMAKE_BUILD_TYPE=Debug)
+set(CMAKE_CXX_STANDARD 14)
 ## Add support for C++11, supported in ROS Kinetic and newer
 # add_definitions(-std=c++11)
 
@@ -12,8 +14,11 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   genmsg
+  grid_map_core
+  grid_map_ros
 )
 
+find_package (Eigen3 REQUIRED NO_MODULE)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -102,10 +107,10 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES beginner_tutorials
-#  CATKIN_DEPENDS roscpp rospy std_msgs
-#  DEPENDS system_lib
+  INCLUDE_DIRS include
+  LIBRARIES adas_gridmap_tools 
+  CATKIN_DEPENDS roscpp rospy std_msgs grid_map_core grid_map_ros
+  DEPENDS system_lib
 )
 
 ###########
@@ -200,13 +205,18 @@ include_directories(
 # My Inclusions
 ##################################################################################
 
-include_directories(include ${catkin_INCLUDE_DIRS})
+include_directories(include 
+${catkin_INCLUDE_DIRS}
+src
+include
+include/adas_gridmap_tools
+)
 
 ##################################################################################
 # Add talker
 ##################################################################################
 
-add_executable(talker src/talker.cpp)
-target_link_libraries(talker ${catkin_LIBRARIES})
-add_dependencies(talker beginner_tutorials_generate_messages_cpp)
+add_executable(adas_gridmap_tools src/adas_gridmap_tools.cpp)
+target_link_libraries(adas_gridmap_tools ${catkin_LIBRARIES})
+add_dependencies(adas_gridmap_tools adas_gridmap_tools_generate_messages_cpp)
 
