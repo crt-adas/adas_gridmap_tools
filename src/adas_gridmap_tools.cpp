@@ -176,82 +176,159 @@ int main(int argc, char **argv)
       double lenX = (newMap.getLength().x() - 1)/2;
       double lenY = (newMap.getLength().y() - 1)/2;
       double th = tf::getYaw(poseArrow.pose.orientation);
+
       int i1 = 0;
-      int j1 = 0;
+      int j12 = 1;
       int i2 = 0;
-      int j2 = 0;
+      
       int i3 = 0;
-      int j3 = 0;
+      int j34 = 1;
       int i4 = 0;
-      int j4 = 0;
       
-      int lenghtR = 0;
-      int lenghtL = 0;
       
-      do{
-        p1.x = poseArrow.pose.position.x + res*j1*cos(th + (M_PI/2)) + res*i1*cos(th);
-        p1.y = poseArrow.pose.position.y + res*j1*sin(th + (M_PI/2)) + res*i1*sin(th);
-        i1++;
-        if ((abs(p1.x) > lenX) || (abs(p1.y) > lenY))
-          break;
+      int lengthR = 0;
+      int lengthL = 0;
+      bool rectangleOk = true;
+      double rectangleArea;
+      double rectangleAreaLast;
+      double BiggestrectangleArea;
+      geometry_msgs::Point p1o,p2o,p3o,p4o;
+      bool expandRight = false;
+      double count;
+      do
+      {
+
+        
+        do{
+          p1.x = poseArrow.pose.position.x + res*j12*cos(th + (M_PI/2)) + res*i1*cos(th);  //centerX + right + front
+          p1.y = poseArrow.pose.position.y + res*j12*sin(th + (M_PI/2)) + res*i1*sin(th);  //centerY + right + front
+          i1++;
+          if ((abs(p1.x) > lenX) || (abs(p1.y) > lenY))
+            break;
+        }
+        while(!newMap.atPosition("elevation", {p1.x, p1.y}));
+      
+        do{
+          p2.x = poseArrow.pose.position.x + res*j12*cos(th + (M_PI/2)) - res*i2*cos(th);  //centerX + right + back
+          p2.y = poseArrow.pose.position.y + res*j12*sin(th + (M_PI/2)) - res*i2*sin(th);  //centerY + right + back
+          i2++;
+          if ((abs(p2.x) > lenX) || (abs(p2.y) > lenY))
+            break;
+        }
+        while(!newMap.atPosition("elevation", {p2.x, p2.y}));
+        
+        
+
+        
+        do{
+          p3.x = poseArrow.pose.position.x - res*j34*cos(th + (M_PI/2)) + res*i3*cos(th);  //centerX + left + front
+          p3.y = poseArrow.pose.position.y - res*j34*sin(th + (M_PI/2)) + res*i3*sin(th);  //centerY + left + front
+          i3++;
+          if ((abs(p3.x) > lenX) || (abs(p3.y) > lenY))
+            break;
+        }
+        while(!newMap.atPosition("elevation", {p3.x, p3.y}));
+        
+        do{
+          p4.x = poseArrow.pose.position.x - res*j34*cos(th + (M_PI/2)) - res*i4*cos(th);  //centerX + left + back
+          p4.y = poseArrow.pose.position.y - res*j34*sin(th + (M_PI/2)) - res*i4*sin(th);  //centerY + left + back
+          i4++;
+          if ((abs(p4.x) > lenX) || (abs(p4.y) > lenY))
+            break;
+        }
+        while(!newMap.atPosition("elevation", {p4.x, p4.y}));
+        
+
+        
+          
+      
+        if(i1 > i3)  // This condition keeps the rectangle shape by picking the shortest length for both sides (front)
+        {
+          p1.x = poseArrow.pose.position.x + res*j12*cos(th + (M_PI/2)) + res*i3*cos(th);
+          p1.y = poseArrow.pose.position.y + res*j12*sin(th + (M_PI/2)) + res*i3*sin(th);
+          i1 = i3;
+        }else
+        {
+          p3.x = poseArrow.pose.position.x - res*j34*cos(th + (M_PI/2)) + res*i1*cos(th);
+          p3.y = poseArrow.pose.position.y - res*j34*sin(th + (M_PI/2)) + res*i1*sin(th);
+          i3 = i1;
+        }
+        if(i2 > i4)  // This condition keeps the rectangle shape by picking the shortest length for both sides (back) 
+        {
+          p2.x = poseArrow.pose.position.x + res*j12*cos(th + (M_PI/2)) - res*i4*cos(th);
+          p2.y = poseArrow.pose.position.y + res*j12*sin(th + (M_PI/2)) - res*i4*sin(th);
+          i2 = i4;
+        }else
+        {
+          p4.x = poseArrow.pose.position.x - res*j34*cos(th + (M_PI/2)) - res*i2*cos(th);
+          p4.y = poseArrow.pose.position.y - res*j34*sin(th + (M_PI/2)) - res*i2*sin(th);
+          i4 = i2;
+        }
+
+
+
+
+
+
+
+
+        rectangleArea = (j12+j34) * (i1+i2); //Current area of rectangle
+
+        if (rectangleArea > BiggestrectangleArea)
+        {
+
+          BiggestrectangleArea = rectangleArea;
+
+          p1o = p1;
+          p2o = p2;
+          p3o = p3;
+          p4o = p4;
+
+        }
+
+        
+        if (!expandRight)
+        {
+          j12++;
+          expandRight = true;
+        }
+        else
+        {
+          j34++;
+          expandRight = false;
+        }  
+      
+        if (count > 100)
+          rectangleOk = false;
+        
+         
+
+        rectangleAreaLast = rectangleArea;
+
+        int i1 = 0;
+        int i2 = 0;
+        int i3 = 0;
+        int i4 = 0;
+
+        
+
+        newPose = false;
+        
       }
-      while(!newMap.atPosition("elevation", {p1.x, p1.y}));
-      line_strip.points.push_back(p1);
+      while(!rectangleOk);
+
+      line_strip.points.push_back(p1o);
+      line_strip.points.push_back(p2o);
+      line_strip.points.push_back(p4o);
+      line_strip.points.push_back(p3o);
+      line_strip.points.push_back(p1o);
       
-      
-      do{
-        p2.x = poseArrow.pose.position.x + res*j2*cos(th + (M_PI/2)) - res*i2*cos(th);
-        p2.y = poseArrow.pose.position.y + res*j2*sin(th + (M_PI/2)) - res*i2*sin(th);
-        i2++;
-        if ((abs(p2.x) > lenX) || (abs(p2.y) > lenY))
-          break;
-      }
-      while(!newMap.atPosition("elevation", {p2.x, p2.y}));
-      lenghtR = i1+i2;
-      
-      line_strip.points.push_back(p2);
-
-
-
-
-
-
-
-      
-      do{
-        p3.x = poseArrow.pose.position.x - res*j3*cos(th + (M_PI/2)) + res*i3*cos(th);
-        p3.y = poseArrow.pose.position.y - res*j3*sin(th + (M_PI/2)) + res*i3*sin(th);
-        i3++;
-        if ((abs(p3.x) > lenX) || (abs(p3.y) > lenY))
-          break;
-      }
-      while(!newMap.atPosition("elevation", {p3.x, p3.y}));
-      line_strip.points.push_back(p3);
-           
-
-      
-      do{
-        p4.x = poseArrow.pose.position.x - res*j4*cos(th + (M_PI/2)) - res*i4*cos(th);
-        p4.y = poseArrow.pose.position.y - res*j4*sin(th + (M_PI/2)) - res*i4*sin(th);
-        i4++;
-        if ((abs(p4.x) > lenX) || (abs(p4.y) > lenY))
-          break;
-      }
-      while(!newMap.atPosition("elevation", {p4.x, p4.y}));
-      line_strip.points.push_back(p4);
-      lenghtR = i3+i4;     
-
-
-
-
-
-
-
       arrowMarkers->markers.push_back(line_strip);
       MarkersOut(arrowMarkers);
-      newPose = false;
+
+      count++;
+
     }
-    
     
 
 
