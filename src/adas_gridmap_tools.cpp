@@ -4,11 +4,12 @@
 #include "nav_msgs/OccupancyGrid.h"
 #include <tf/transform_broadcaster.h>
 #include <sstream>
+#include <limits>
 
 #include <grid_map_core/GridMap.hpp>
 #include <grid_map_ros/GridMapRosConverter.hpp>
 
-
+#include "geometry_msgs/Pose2D.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 
@@ -16,6 +17,8 @@
 #include <visualization_msgs/MarkerArray.h>
 
 
+
+typedef unsigned long int uintl;
 
 
 
@@ -126,218 +129,256 @@ int main(int argc, char **argv)
     }
   }
 
-
-  
-    
     
   double oldInitx = 0.0;
   double oldGoalx = 0.0;
+  bool rectangleDone = false;
+  PoseStamped poseArrowGoal;
+  PoseStamped poseArrowInit;
+  bool initReceived = false;
+  bool goalReceived = false;
 
   ::ros::Rate loop_rate(10);
   while (::ros::ok())
   {
-
     auto initPos = initPoseIn();
     auto goalPose = goalPoseIn();
-    PoseStamped poseArrow;
+    
     bool ifInit;
-    bool newPose = false;
+    
+    
 
     if(initPos.pose.pose.position.x != oldInitx)
-    {                   
-      ROS_INFO_STREAM("Initial Pose Recieved!");
+    {      
+      if(rectangleDone)  
+      {
+        arrowMarkers->markers.clear();
+        rectangleDone = false;
+      }
+      ROS_INFO_STREAM("Initial Pose Received!");
       oldInitx = initPos.pose.pose.position.x;
-      poseArrow.pose = initPos.pose.pose;
+      poseArrowInit.pose = initPos.pose.pose;
       ifInit = true;
-      sendArrow(poseArrow, ifInit);
-      newPose = true;
+      sendArrow(poseArrowInit, ifInit);
+      initReceived = true;
       MarkersOut(arrowMarkers);
     }
 
     if(goalPose.pose.position.x != oldGoalx)
-    {                   
-      ROS_INFO_STREAM("Goal Pose Recieved!");
+    {    
+      if(rectangleDone)  
+      {
+        arrowMarkers->markers.clear();
+        rectangleDone = false;
+      }               
+      ROS_INFO_STREAM("Goal Pose Received!");
       oldGoalx = goalPose.pose.position.x;
-      poseArrow = goalPose;
+      poseArrowGoal = goalPose;
       ifInit = false;
-      sendArrow(poseArrow, ifInit);
-      newPose = true;
+      sendArrow(poseArrowGoal, ifInit);
+      goalReceived = true;
       MarkersOut(arrowMarkers);
 
     }
 
-    if(newPose)
+    if( goalReceived && !initReceived)
+      ROS_INFO_STREAM_ONCE("Waiting for Inital pose... ");
+
+    if( !goalReceived && initReceived)
+      ROS_INFO_STREAM_ONCE("Waiting for Final pose... ");
+
+
+
+    if(goalReceived && initReceived)
     {
+      
+      Marker line_strip1, line_strip2;
+      getRecInfo(line_strip1);
+      getRecInfo(line_strip2);
 
-      visualization_msgs::Marker line_strip;
-      geometry_msgs::Point p1,p2,p3,p4;
-      getRecInfo(line_strip);
-      double res = newMap.getResolution();
-      double lenX = (newMap.getLength().x() - 1)/2;
-      double lenY = (newMap.getLength().y() - 1)/2;
-      double th = tf::getYaw(poseArrow.pose.orientation);
+      Pose2D init, goal;
+      Point p1i,p2i,p3i,p4i;
+      Point p1g,p2g,p3g,p4g;
+      Point p1o,p2o,p3o,p4o;
+      Point p1oo,p2oo,p3oo,p4oo;
 
-      int i1 = 0;
-      int j12 = 1;
-      int i2 = 0;
+      float m1, c1, m2, c2; //1 = inital, 2 = goal
+      float intSectX, intSectY; 
+
+      uintl i1 = 0, i2 = 0, i3 = 0, i4 = 0;
+      uintl j1 = 0, j2 = 0, j3 = 0, j4 = 0;
+      uintl j1Min = std::numeric_limits<int>::max(), j2Min = j1Min, j3Min = j1Min, j4Min = j1Min;
+
+      uintl ii1 = 0, ii2 = 0, ii3 = 0, ii4 = 0;
+      uintl jj1 = 0, jj2 = 0, jj3 = 0, jj4 = 0;
+      uintl jj1Min = std::numeric_limits<int>::max(), jj2Min = jj1Min, jj3Min = jj1Min, jj4Min = jj1Min;
+
+      float res = newMap.getResolution();
+      float lenX = (newMap.getLength().x() - 1)/2;
+      float lenY = (newMap.getLength().y() - 1)/2;
+
+      init.x = poseArrowInit.pose.position.x;
+      init.y = poseArrowInit.pose.position.y;
+      init.theta = tf::getYaw(poseArrowInit.pose.orientation);
       
-      int i3 = 0;
-      int j34 = 1;
-      int i4 = 0;
-      
-      
-      int lengthR = 0;
-      int lengthL = 0;
-      bool rectangleOk = true;
-      double rectangleArea;
-      double rectangleAreaLast;
-      double BiggestrectangleArea;
-      geometry_msgs::Point p1o,p2o,p3o,p4o;
-      bool expandRight = false;
-      double count;
-      do
+      goal.x = poseArrowGoal.pose.position.x;
+      goal.y = poseArrowGoal.pose.position.y;
+      goal.theta = tf::getYaw(poseArrowGoal.pose.orientation);
+
+      m1 = tan(init.theta);
+      c1 = init.y - ( m1 * init.x);
+      m2 = tan(goal.theta);
+      c2 = goal.y - ( m2 * goal.x);
+
+      if((m1 - m2) == 0)
+        ROS_INFO_STREAM("No Intersection between Inital and Final pose");
+      else
       {
+        intSectX = (c2 - c1) / (m1 - m2);
+        intSectY = m1 * intSectX + c1;
+        ROS_INFO_STREAM("Intersection at: " << intSectX << " ," << intSectY <<"");
 
-        
-        do{
-          p1.x = poseArrow.pose.position.x + res*j12*cos(th + (M_PI/2)) + res*i1*cos(th);  //centerX + right + front
-          p1.y = poseArrow.pose.position.y + res*j12*sin(th + (M_PI/2)) + res*i1*sin(th);  //centerY + right + front
-          i1++;
-          if ((abs(p1.x) > lenX) || (abs(p1.y) > lenY))
-            break;
-        }
-        while(!newMap.atPosition("elevation", {p1.x, p1.y}));
-      
-        do{
-          p2.x = poseArrow.pose.position.x + res*j12*cos(th + (M_PI/2)) - res*i2*cos(th);  //centerX + right + back
-          p2.y = poseArrow.pose.position.y + res*j12*sin(th + (M_PI/2)) - res*i2*sin(th);  //centerY + right + back
-          i2++;
-          if ((abs(p2.x) > lenX) || (abs(p2.y) > lenY))
-            break;
-        }
-        while(!newMap.atPosition("elevation", {p2.x, p2.y}));
-        
-        
-
-        
-        do{
-          p3.x = poseArrow.pose.position.x - res*j34*cos(th + (M_PI/2)) + res*i3*cos(th);  //centerX + left + front
-          p3.y = poseArrow.pose.position.y - res*j34*sin(th + (M_PI/2)) + res*i3*sin(th);  //centerY + left + front
-          i3++;
-          if ((abs(p3.x) > lenX) || (abs(p3.y) > lenY))
-            break;
-        }
-        while(!newMap.atPosition("elevation", {p3.x, p3.y}));
-        
-        do{
-          p4.x = poseArrow.pose.position.x - res*j34*cos(th + (M_PI/2)) - res*i4*cos(th);  //centerX + left + back
-          p4.y = poseArrow.pose.position.y - res*j34*sin(th + (M_PI/2)) - res*i4*sin(th);  //centerY + left + back
-          i4++;
-          if ((abs(p4.x) > lenX) || (abs(p4.y) > lenY))
-            break;
-        }
-        while(!newMap.atPosition("elevation", {p4.x, p4.y}));
-        
-
-        
-          
-      
-        if(i1 > i3)  // This condition keeps the rectangle shape by picking the shortest length for both sides (front)
-        {
-          p1.x = poseArrow.pose.position.x + res*j12*cos(th + (M_PI/2)) + res*i3*cos(th);
-          p1.y = poseArrow.pose.position.y + res*j12*sin(th + (M_PI/2)) + res*i3*sin(th);
-          i1 = i3;
-        }else
-        {
-          p3.x = poseArrow.pose.position.x - res*j34*cos(th + (M_PI/2)) + res*i1*cos(th);
-          p3.y = poseArrow.pose.position.y - res*j34*sin(th + (M_PI/2)) + res*i1*sin(th);
-          i3 = i1;
-        }
-        if(i2 > i4)  // This condition keeps the rectangle shape by picking the shortest length for both sides (back) 
-        {
-          p2.x = poseArrow.pose.position.x + res*j12*cos(th + (M_PI/2)) - res*i4*cos(th);
-          p2.y = poseArrow.pose.position.y + res*j12*sin(th + (M_PI/2)) - res*i4*sin(th);
-          i2 = i4;
-        }else
-        {
-          p4.x = poseArrow.pose.position.x - res*j34*cos(th + (M_PI/2)) - res*i2*cos(th);
-          p4.y = poseArrow.pose.position.y - res*j34*sin(th + (M_PI/2)) - res*i2*sin(th);
-          i4 = i2;
-        }
-
-
-
-
-
-
-
-
-        rectangleArea = (j12+j34) * (i1+i2); //Current area of rectangle
-
-        if (rectangleArea > BiggestrectangleArea)
-        {
-
-          BiggestrectangleArea = rectangleArea;
-
-          p1o = p1;
-          p2o = p2;
-          p3o = p3;
-          p4o = p4;
-
-        }
-
-        
-        if (!expandRight)
-        {
-          j12++;
-          expandRight = true;
-        }
+        if(newMap.atPosition("elevation", {intSectX, intSectY}))
+          ROS_INFO_STREAM("Intersection is not collision free!");
         else
         {
-          j34++;
-          expandRight = false;
-        }  
-      
-        if (count > 100)
-          rectangleOk = false;
-        
-         
+          uintl initL = sqrt(pow(intSectX - init.x, 2) +  pow(intSectY - init.y, 2))/res ; // Distance in res units
+          ROS_INFO_STREAM("Distance from inital pose to Intersection: " << initL*res << " m");
+          uintl goalL = sqrt(pow(intSectX - goal.x, 2) +  pow(intSectY - goal.y, 2))/res ; // Distance in res units
+          ROS_INFO_STREAM("Distance from goal pose to Intersection: " << goalL*res << " m");
 
-        rectangleAreaLast = rectangleArea;
 
-        int i1 = 0;
-        int i2 = 0;
-        int i3 = 0;
-        int i4 = 0;
+          for(i1=0; i1 <= initL; i1++) 
+          {
+            do{
+            p1i.x = init.x + res*j1*cos(init.theta + (M_PI/2)) + res*i1*cos(init.theta);  //centerX + right + front
+            p1i.y = init.y + res*j1*sin(init.theta + (M_PI/2)) + res*i1*sin(init.theta);  //centerY + right + front
+            j1++;
+            if ((abs(p1i.x) > lenX) || (abs(p1i.y) > lenY))
+              break;
+            }
+            while(!newMap.atPosition("elevation", {p1i.x, p1i.y})); //! means free cell
+            
+            if(j1 < j1Min)
+              j1Min = j1;
 
-        
+            j1 = 0;
+          }
+          
+          for(i3=0; i3 <= initL; i3++) 
+          {
+            ROS_INFO_STREAM("i3: " << i3 << "");
+            do{
+            p3i.x = init.x - res*j3*cos(init.theta + (M_PI/2)) + res*i3*cos(init.theta);  //centerX + left + front
+            p3i.y = init.y - res*j3*sin(init.theta + (M_PI/2)) + res*i3*sin(init.theta);  //centerY + left + front
+            j3++;
+            if ((abs(p3i.x) > lenX) || (abs(p3i.y) > lenY))
+              break;
+            }
+            while(!newMap.atPosition("elevation", {p3i.x, p3i.y})); //! means free cell
+            
+            if(j3 < j3Min)
+              j3Min = j3;
 
-        newPose = false;
-        
+            j3 = 0;
+          }
+
+          
+          p1o.x = init.x + res*j1Min*cos(init.theta + (M_PI/2)) + res*initL*cos(init.theta);  //centerX + right + front
+          p1o.y = init.y + res*j1Min*sin(init.theta + (M_PI/2)) + res*initL*sin(init.theta);  //centerY + right + front
+
+          p3o.x = init.x - res*j3Min*cos(init.theta + (M_PI/2)) + res*initL*cos(init.theta);  //centerX + left + front
+          p3o.y = init.y - res*j3Min*sin(init.theta + (M_PI/2)) + res*initL*sin(init.theta);  //centerY + left + front
+
+          p2o.x = init.x + res*j1Min*cos(init.theta + (M_PI/2)) ;  //centerX + right 
+          p2o.y = init.y + res*j1Min*sin(init.theta + (M_PI/2)) ;  //centerY + right 
+
+          p4o.x = init.x - res*j3Min*cos(init.theta + (M_PI/2)) ;  //centerX + left 
+          p4o.y = init.y - res*j3Min*sin(init.theta + (M_PI/2)) ;  //centerY + left 
+
+          line_strip1.points.push_back(p1o);
+          line_strip1.points.push_back(p2o);
+          line_strip1.points.push_back(p4o);
+          line_strip1.points.push_back(p3o);
+          line_strip1.points.push_back(p1o);
+          arrowMarkers->markers.push_back(line_strip1);
+
+
+
+          for(ii2=0; ii2 <= goalL; ii2++) 
+          {
+            
+            do{
+            p2g.x = goal.x + res*jj2*cos(goal.theta + (M_PI/2)) - res*ii2*cos(goal.theta);  //centerX + right + front
+            p2g.y = goal.y + res*jj2*sin(goal.theta + (M_PI/2)) - res*ii2*sin(goal.theta);  //centerY + right + front
+            jj2++;
+            if ((abs(p2g.x) > lenX) || (abs(p2g.y) > lenY))
+              break;
+            }
+            while(!newMap.atPosition("elevation", {p2g.x, p2g.y})); //! means free cell
+            
+            if(jj2 < jj2Min)
+              jj2Min = jj2;
+             
+            jj2 = 0;
+          }
+          
+          for(ii4=0; ii4 <= goalL; ii4++) 
+          {
+            do{
+            p4g.x = goal.x - res*jj4*cos(goal.theta + (M_PI/2)) - res*ii4*cos(goal.theta);  //centerX + left + back
+            p4g.y = goal.y - res*jj4*sin(goal.theta + (M_PI/2)) - res*ii4*sin(goal.theta);  //centerY + left + back
+            jj4++;
+            if ((abs(p4g.x) > lenX) || (abs(p4g.y) > lenY))
+              break;
+            }
+            while(!newMap.atPosition("elevation", {p4g.x, p4g.y})); //! means free cell
+            
+            if(jj4 < jj4Min)
+              jj4Min = jj4;
+
+            jj4 = 0;
+          }
+
+          
+
+          p2oo.x = goal.x + res*jj2Min*cos(goal.theta + (M_PI/2)) - res*goalL*cos(goal.theta);  //centerX + right + back
+          p2oo.y = goal.y + res*jj2Min*sin(goal.theta + (M_PI/2)) - res*goalL*sin(goal.theta);  //centerY + right + back
+
+          p4oo.x = goal.x - res*jj4Min*cos(goal.theta + (M_PI/2)) - res*goalL*cos(goal.theta);  //centerX + left + back
+          p4oo.y = goal.y - res*jj4Min*sin(goal.theta + (M_PI/2)) - res*goalL*sin(goal.theta);  //centerY + left + back
+
+          p1oo.x = goal.x + res*jj2Min*cos(goal.theta + (M_PI/2)) ;  //centerX + right 
+          p1oo.y = goal.y + res*jj2Min*sin(goal.theta + (M_PI/2)) ;  //centerY + right 
+
+          p3oo.x = goal.x - res*jj4Min*cos(goal.theta + (M_PI/2)) ;  //centerX + left 
+          p3oo.y = goal.y - res*jj4Min*sin(goal.theta + (M_PI/2)) ;  //centerY + left 
+
+
+
+          line_strip2.points.push_back(p1oo);
+          line_strip2.points.push_back(p2oo);
+          line_strip2.points.push_back(p4oo);
+          line_strip2.points.push_back(p3oo);
+          line_strip2.points.push_back(p1oo);
+          arrowMarkers->markers.push_back(line_strip2);
+
+          MarkersOut(arrowMarkers);
+        }
+
       }
-      while(!rectangleOk);
-
-      line_strip.points.push_back(p1o);
-      line_strip.points.push_back(p2o);
-      line_strip.points.push_back(p4o);
-      line_strip.points.push_back(p3o);
-      line_strip.points.push_back(p1o);
       
-      arrowMarkers->markers.push_back(line_strip);
-      MarkersOut(arrowMarkers);
-
-      count++;
+      goalReceived = false;
+      initReceived = false;
+      rectangleDone = true;
 
     }
-    
-
 
     gridMapOut(gridMapMsg);
     ::ros::spinOnce();
     loop_rate.sleep();
     
   }
-
 
   return 0;
 }
