@@ -197,28 +197,19 @@ int main(int argc, char **argv)
       getRecInfo(line_strip2);
       getRecInfo(line_strip3);
 
-      Pose2D init, goal;
-      Point p1i,p2i,p3i,p4i;
-      Point p1g,p2g,p3g,p4g;
-      Point p1m,p2m,p3m,p4m;
+      Pose2D init, goal, inter;
+      Point p;
+      std::vector<Point> rec1, rec2 ,rec3;
       Point p1o,p2o,p3o,p4o;
       Point p1oo,p2oo,p3oo,p4oo;
       Point p1ooo,p2ooo,p3ooo,p4ooo;
 
       float m1, c1, m2, c2; //1 = inital, 2 = goal
-      float intSectX, intSectY, intSectTh;  
-
-      uintl i1 = 0, i2 = 0, i3 = 0, i4 = 0;
-      uintl j1 = 0, j2 = 0, j3 = 0, j4 = 0;
-      uintl j1Min = std::numeric_limits<int>::max(), j2Min = j1Min, j3Min = j1Min, j4Min = j1Min;
-
-      uintl ii1 = 0, ii2 = 0, ii3 = 0, ii4 = 0;
-      uintl jj1 = 0, jj2 = 0, jj3 = 0, jj4 = 0;
-      uintl jj1Min = std::numeric_limits<int>::max(), jj2Min = jj1Min, jj3Min = jj1Min, jj4Min = jj1Min;
-
-      uintl iii1 = 0, iii2 = 0, iii3 = 0, iii4 = 0;
-      uintl jjj1 = 0, jjj2 = 0, jjj3 = 0, jjj4 = 0;
-      uintl jjj1Min = std::numeric_limits<int>::max(), jjj2Min = jjj1Min, jjj3Min = jjj1Min, jjj4Min = jjj1Min;
+      
+      int j = 0;
+      int j1Min = std::numeric_limits<int>::max(), j2Min = j1Min, j3Min = j1Min, j4Min = j1Min;
+      int jj1Min = std::numeric_limits<int>::max(), jj2Min = jj1Min, jj3Min = jj1Min, jj4Min = jj1Min;
+      int jjj1Min = std::numeric_limits<int>::max(), jjj2Min = jjj1Min, jjj3Min = jjj1Min, jjj4Min = jjj1Min;
 
       float res = newMap.getResolution();
       float lenX = (newMap.getLength().x() - 1)/2;
@@ -241,52 +232,48 @@ int main(int argc, char **argv)
         ROS_INFO_STREAM("No Intersection between Inital and Final pose");
       else
       {
-        intSectX = (c2 - c1) / (m1 - m2);
-        intSectY = m1 * intSectX + c1;
-        ROS_INFO_STREAM("Intersection at: " << intSectX << " ," << intSectY <<"");
+        inter.x = (c2 - c1) / (m1 - m2);
+        inter.y = m1 * inter.x + c1;
+        ROS_INFO_STREAM("Intersection at: " << inter.x << " ," << inter.y <<"");
 
-        if(newMap.atPosition("elevation", {intSectX, intSectY}))
+        if(newMap.atPosition("elevation", {inter.x, inter.y}))
           ROS_INFO_STREAM("Intersection is not collision free!");
         else
         {
-          uintl initL = sqrt(pow(intSectX - init.x, 2) +  pow(intSectY - init.y, 2))/res ; // Distance in res units
+          uintl initL = sqrt(pow(inter.x - init.x, 2) +  pow(inter.y - init.y, 2))/res ; // Distance in res units
           ROS_INFO_STREAM("Distance from inital pose to Intersection: " << initL*res << " m");
-          uintl goalL = sqrt(pow(intSectX - goal.x, 2) +  pow(intSectY - goal.y, 2))/res ; // Distance in res units
+          uintl goalL = sqrt(pow(inter.x - goal.x, 2) +  pow(inter.y - goal.y, 2))/res ; // Distance in res units
           ROS_INFO_STREAM("Distance from goal pose to Intersection: " << goalL*res << " m");
 
 
-          for(i1=0; i1 <= initL; i1++) 
+          for(int i=0; i <= initL; i++) 
           {
             do{
-            p1i.x = init.x + res*j1*cos(init.theta + (M_PI/2)) + res*i1*cos(init.theta);  //centerX + right + front
-            p1i.y = init.y + res*j1*sin(init.theta + (M_PI/2)) + res*i1*sin(init.theta);  //centerY + right + front
-            j1++;
-            if ((abs(p1i.x) > lenX) || (abs(p1i.y) > lenY))
+            p.x = init.x + res*j*cos(init.theta + (M_PI/2)) + res*i*cos(init.theta);  //centerX + right + front
+            p.y = init.y + res*j*sin(init.theta + (M_PI/2)) + res*i*sin(init.theta);  //centerY + right + front
+            j++;
+            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
               break;
             }
-            while(!newMap.atPosition("elevation", {p1i.x, p1i.y})); //! means free cell
-            
-            if(j1 < j1Min)
-              j1Min = j1;
+            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
 
-            j1 = 0;
+            j1Min = std::min(j1Min,j);
+            j = 0;
           }
           
-          for(i3=0; i3 <= initL; i3++) 
+          for(int i=0; i <= initL; i++) 
           {
             do{
-            p3i.x = init.x - res*j3*cos(init.theta + (M_PI/2)) + res*i3*cos(init.theta);  //centerX + left + front
-            p3i.y = init.y - res*j3*sin(init.theta + (M_PI/2)) + res*i3*sin(init.theta);  //centerY + left + front
-            j3++;
-            if ((abs(p3i.x) > lenX) || (abs(p3i.y) > lenY))
+            p.x = init.x - res*j*cos(init.theta + (M_PI/2)) + res*i*cos(init.theta);  //centerX + left + front
+            p.y = init.y - res*j*sin(init.theta + (M_PI/2)) + res*i*sin(init.theta);  //centerY + left + front
+            j++;
+            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
               break;
             }
-            while(!newMap.atPosition("elevation", {p3i.x, p3i.y})); //! means free cell
-            
-            if(j3 < j3Min)
-              j3Min = j3;
+            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
 
-            j3 = 0;
+            j3Min = std::min(j3Min,j);
+            j = 0;
           }
 
           
@@ -311,39 +298,35 @@ int main(int argc, char **argv)
 
 
 
-          for(ii2=0; ii2 <= goalL; ii2++) 
+          for(int i=0; i <= goalL; i++) 
           {
             
             do{
-            p2g.x = goal.x + res*jj2*cos(goal.theta + (M_PI/2)) - res*ii2*cos(goal.theta);  //centerX + right + front
-            p2g.y = goal.y + res*jj2*sin(goal.theta + (M_PI/2)) - res*ii2*sin(goal.theta);  //centerY + right + front
-            jj2++;
-            if ((abs(p2g.x) > lenX) || (abs(p2g.y) > lenY))
+            p.x = goal.x + res*j*cos(goal.theta + (M_PI/2)) - res*i*cos(goal.theta);  //centerX + right + front
+            p.y = goal.y + res*j*sin(goal.theta + (M_PI/2)) - res*i*sin(goal.theta);  //centerY + right + front
+            j++;
+            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
               break;
             }
-            while(!newMap.atPosition("elevation", {p2g.x, p2g.y})); //! means free cell
+            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
             
-            if(jj2 < jj2Min)
-              jj2Min = jj2;
-             
-            jj2 = 0;
+            jj2Min = std::min(jj2Min,j);
+            j = 0;
           }
           
-          for(ii4=0; ii4 <= goalL; ii4++) 
+          for(int i=0; i <= goalL; i++) 
           {
             do{
-            p4g.x = goal.x - res*jj4*cos(goal.theta + (M_PI/2)) - res*ii4*cos(goal.theta);  //centerX + left + back
-            p4g.y = goal.y - res*jj4*sin(goal.theta + (M_PI/2)) - res*ii4*sin(goal.theta);  //centerY + left + back
-            jj4++;
-            if ((abs(p4g.x) > lenX) || (abs(p4g.y) > lenY))
+            p.x = goal.x - res*j*cos(goal.theta + (M_PI/2)) - res*i*cos(goal.theta);  //centerX + left + back
+            p.y = goal.y - res*j*sin(goal.theta + (M_PI/2)) - res*i*sin(goal.theta);  //centerY + left + back
+            j++;
+            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
               break;
             }
-            while(!newMap.atPosition("elevation", {p4g.x, p4g.y})); //! means free cell
-            
-            if(jj4 < jj4Min)
-              jj4Min = jj4;
+            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
 
-            jj4 = 0;
+            jj4Min = std::min(jj4Min,j);
+            j = 0;
           }
 
           
@@ -370,7 +353,7 @@ int main(int argc, char **argv)
           arrowMarkers->markers.push_back(line_strip2);
 
 
-          intSectTh = ((goal.theta - init.theta)/2) + init.theta;
+          inter.theta = ((goal.theta - init.theta)/2) + init.theta;
 
           uintl front3 = std::min(j3Min,jj2Min);
           uintl back3 = std::min(j1Min,jj4Min);
@@ -380,79 +363,79 @@ int main(int argc, char **argv)
           for(int i =0; i <= front3; i++) 
           {
             do{
-            p1m.x = intSectX + res*j1*cos(intSectTh + (M_PI/2)) + res*i*cos(intSectTh);  //centerX + right + front
-            p1m.y = intSectY + res*j1*sin(intSectTh + (M_PI/2)) + res*i*sin(intSectTh);  //centerY + right + front
-            j1++;
-            if ((abs(p1m.x) > lenX) || (abs(p1m.y) > lenY))
+            p.x = inter.x + res*j*cos(inter.theta + (M_PI/2)) + res*i*cos(inter.theta);  //centerX + right + front
+            p.y = inter.y + res*j*sin(inter.theta + (M_PI/2)) + res*i*sin(inter.theta);  //centerY + right + front
+            j++;
+            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
               break;
             }
-            while(!newMap.atPosition("elevation", {p1m.x, p1m.y})); //! means free cell
+            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
             
-            jjj1Min = std::min(jjj1Min,j1);
-            j1 = 0;
+            jjj1Min = std::min(jjj1Min,j);
+            j = 0;
           }
           
           for(int i =0; i <= front3; i++) 
           {
             do{
-            p3m.x = intSectX - res*j3*cos(intSectTh + (M_PI/2)) + res*i*cos(intSectTh);  //centerX + left + front
-            p3m.y = intSectY - res*j3*sin(intSectTh + (M_PI/2)) + res*i*sin(intSectTh);  //centerY + left + front
-            j3++;
-            if ((abs(p3m.x) > lenX) || (abs(p3m.y) > lenY))
+            p.x = inter.x - res*j*cos(inter.theta + (M_PI/2)) + res*i*cos(inter.theta);  //centerX + left + front
+            p.y = inter.y - res*j*sin(inter.theta + (M_PI/2)) + res*i*sin(inter.theta);  //centerY + left + front
+            j++;
+            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
               break;
             }
-            while(!newMap.atPosition("elevation", {p3m.x, p3m.y})); //! means free cell
+            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
             
-            jjj3Min = std::min(jjj3Min,j3);
-            j3 = 0;
+            jjj3Min = std::min(jjj3Min,j);
+            j = 0;
           }
 
           for(int i =0; i <= back3; i++) 
           {
             
             do{
-            p2m.x = intSectX + res*jj2*cos(intSectTh + (M_PI/2)) - res*i*cos(intSectTh);  //centerX + right + front
-            p2m.y = intSectY + res*jj2*sin(intSectTh + (M_PI/2)) - res*i*sin(intSectTh);  //centerY + right + front
-            jj2++;
-            if ((abs(p2m.x) > lenX) || (abs(p2m.y) > lenY))
+            p.x = inter.x + res*j*cos(inter.theta + (M_PI/2)) - res*i*cos(inter.theta);  //centerX + right + front
+            p.y = inter.y + res*j*sin(inter.theta + (M_PI/2)) - res*i*sin(inter.theta);  //centerY + right + front
+            j++;
+            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
               break;
             }
-            while(!newMap.atPosition("elevation", {p2m.x, p2m.y})); //! means free cell
+            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
             
-            jjj2Min = std::min(jj2,jjj2Min);
+            jjj2Min = std::min(j,jjj2Min);
 
-            jj2 = 0;
+            j = 0;
           }
           
           for(int i=0; i <= back3; i++) 
           {
             do{
-            p4m.x = intSectX - res*jj4*cos(intSectTh + (M_PI/2)) - res*i*cos(intSectTh);  //centerX + left + back
-            p4m.y = intSectY - res*jj4*sin(intSectTh + (M_PI/2)) - res*i*sin(intSectTh);  //centerY + left + back
-            jj4++;
-            if ((abs(p4m.x) > lenX) || (abs(p4m.y) > lenY))
+            p.x = inter.x - res*j*cos(inter.theta + (M_PI/2)) - res*i*cos(inter.theta);  //centerX + left + back
+            p.y = inter.y - res*j*sin(inter.theta + (M_PI/2)) - res*i*sin(inter.theta);  //centerY + left + back
+            j++;
+            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
               break;
             }
-            while(!newMap.atPosition("elevation", {p4m.x, p4m.y})); //! means free cell
+            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
             
-            jjj4Min = std::min(jj4,jjj4Min);
-            jj4 = 0;
+            jjj4Min = std::min(j,jjj4Min);
+            j = 0;
           }
 
 
           
 
-          p2ooo.x = intSectX + res*std::min(jjj1Min,jjj2Min)*cos(intSectTh + (M_PI/2)) - res*back3*cos(intSectTh);  //centerX + right + back
-          p2ooo.y = intSectY + res*std::min(jjj1Min,jjj2Min)*sin(intSectTh + (M_PI/2)) - res*back3*sin(intSectTh);  //centerY + right + back
+          p2ooo.x = inter.x + res*std::min(jjj1Min,jjj2Min)*cos(inter.theta + (M_PI/2)) - res*back3*cos(inter.theta);  //centerX + right + back
+          p2ooo.y = inter.y + res*std::min(jjj1Min,jjj2Min)*sin(inter.theta + (M_PI/2)) - res*back3*sin(inter.theta);  //centerY + right + back
 
-          p4ooo.x = intSectX - res*std::min(jjj3Min,jjj4Min)*cos(intSectTh + (M_PI/2)) - res*back3*cos(intSectTh);  //centerX + left + back
-          p4ooo.y = intSectY - res*std::min(jjj3Min,jjj4Min)*sin(intSectTh + (M_PI/2)) - res*back3*sin(intSectTh);  //centerY + left + back
+          p4ooo.x = inter.x - res*std::min(jjj3Min,jjj4Min)*cos(inter.theta + (M_PI/2)) - res*back3*cos(inter.theta);  //centerX + left + back
+          p4ooo.y = inter.y - res*std::min(jjj3Min,jjj4Min)*sin(inter.theta + (M_PI/2)) - res*back3*sin(inter.theta);  //centerY + left + back
 
-          p1ooo.x = intSectX + res*std::min(jjj1Min,jjj2Min)*cos(intSectTh + (M_PI/2)) + res*front3*cos(intSectTh) ;  //centerX + right + front
-          p1ooo.y = intSectY + res*std::min(jjj1Min,jjj2Min)*sin(intSectTh + (M_PI/2)) + res*front3*sin(intSectTh) ;  //centerY + right + front
+          p1ooo.x = inter.x + res*std::min(jjj1Min,jjj2Min)*cos(inter.theta + (M_PI/2)) + res*front3*cos(inter.theta) ;  //centerX + right + front
+          p1ooo.y = inter.y + res*std::min(jjj1Min,jjj2Min)*sin(inter.theta + (M_PI/2)) + res*front3*sin(inter.theta) ;  //centerY + right + front
  
-          p3ooo.x = intSectX - res*std::min(jjj3Min,jjj4Min)*cos(intSectTh + (M_PI/2)) + res*front3*cos(intSectTh) ;  //centerX + left + front
-          p3ooo.y = intSectY - res*std::min(jjj3Min,jjj4Min)*sin(intSectTh + (M_PI/2)) + res*front3*sin(intSectTh) ;  //centerY + left + front
+          p3ooo.x = inter.x - res*std::min(jjj3Min,jjj4Min)*cos(inter.theta + (M_PI/2)) + res*front3*cos(inter.theta) ;  //centerX + left + front
+          p3ooo.y = inter.y - res*std::min(jjj3Min,jjj4Min)*sin(inter.theta + (M_PI/2)) + res*front3*sin(inter.theta) ;  //centerY + left + front
 
 
 
