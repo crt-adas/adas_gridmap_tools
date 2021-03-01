@@ -192,18 +192,21 @@ int main(int argc, char **argv)
     if(goalReceived && initReceived)
     {
       
-      Marker line_strip1, line_strip2;
+      Marker line_strip1, line_strip2, line_strip3 ;
       getRecInfo(line_strip1);
       getRecInfo(line_strip2);
+      getRecInfo(line_strip3);
 
       Pose2D init, goal;
       Point p1i,p2i,p3i,p4i;
       Point p1g,p2g,p3g,p4g;
+      Point p1m,p2m,p3m,p4m;
       Point p1o,p2o,p3o,p4o;
       Point p1oo,p2oo,p3oo,p4oo;
+      Point p1ooo,p2ooo,p3ooo,p4ooo;
 
       float m1, c1, m2, c2; //1 = inital, 2 = goal
-      float intSectX, intSectY; 
+      float intSectX, intSectY, intSectTh;  
 
       uintl i1 = 0, i2 = 0, i3 = 0, i4 = 0;
       uintl j1 = 0, j2 = 0, j3 = 0, j4 = 0;
@@ -212,6 +215,10 @@ int main(int argc, char **argv)
       uintl ii1 = 0, ii2 = 0, ii3 = 0, ii4 = 0;
       uintl jj1 = 0, jj2 = 0, jj3 = 0, jj4 = 0;
       uintl jj1Min = std::numeric_limits<int>::max(), jj2Min = jj1Min, jj3Min = jj1Min, jj4Min = jj1Min;
+
+      uintl iii1 = 0, iii2 = 0, iii3 = 0, iii4 = 0;
+      uintl jjj1 = 0, jjj2 = 0, jjj3 = 0, jjj4 = 0;
+      uintl jjj1Min = std::numeric_limits<int>::max(), jjj2Min = jjj1Min, jjj3Min = jjj1Min, jjj4Min = jjj1Min;
 
       float res = newMap.getResolution();
       float lenX = (newMap.getLength().x() - 1)/2;
@@ -267,7 +274,6 @@ int main(int argc, char **argv)
           
           for(i3=0; i3 <= initL; i3++) 
           {
-            ROS_INFO_STREAM("i3: " << i3 << "");
             do{
             p3i.x = init.x - res*j3*cos(init.theta + (M_PI/2)) + res*i3*cos(init.theta);  //centerX + left + front
             p3i.y = init.y - res*j3*sin(init.theta + (M_PI/2)) + res*i3*sin(init.theta);  //centerY + left + front
@@ -362,6 +368,104 @@ int main(int argc, char **argv)
           line_strip2.points.push_back(p3oo);
           line_strip2.points.push_back(p1oo);
           arrowMarkers->markers.push_back(line_strip2);
+
+
+          intSectTh = ((goal.theta - init.theta)/2) + init.theta;
+
+          uintl front3 = std::min(j3Min,jj2Min);
+          uintl back3 = std::min(j1Min,jj4Min);
+
+          
+
+          for(int i =0; i <= front3; i++) 
+          {
+            do{
+            p1m.x = intSectX + res*j1*cos(intSectTh + (M_PI/2)) + res*i*cos(intSectTh);  //centerX + right + front
+            p1m.y = intSectY + res*j1*sin(intSectTh + (M_PI/2)) + res*i*sin(intSectTh);  //centerY + right + front
+            j1++;
+            if ((abs(p1m.x) > lenX) || (abs(p1m.y) > lenY))
+              break;
+            }
+            while(!newMap.atPosition("elevation", {p1m.x, p1m.y})); //! means free cell
+            
+            jjj1Min = std::min(jjj1Min,j1);
+            j1 = 0;
+          }
+          
+          for(int i =0; i <= front3; i++) 
+          {
+            do{
+            p3m.x = intSectX - res*j3*cos(intSectTh + (M_PI/2)) + res*i*cos(intSectTh);  //centerX + left + front
+            p3m.y = intSectY - res*j3*sin(intSectTh + (M_PI/2)) + res*i*sin(intSectTh);  //centerY + left + front
+            j3++;
+            if ((abs(p3m.x) > lenX) || (abs(p3m.y) > lenY))
+              break;
+            }
+            while(!newMap.atPosition("elevation", {p3m.x, p3m.y})); //! means free cell
+            
+            jjj3Min = std::min(jjj3Min,j3);
+            j3 = 0;
+          }
+
+          for(int i =0; i <= back3; i++) 
+          {
+            
+            do{
+            p2m.x = intSectX + res*jj2*cos(intSectTh + (M_PI/2)) - res*i*cos(intSectTh);  //centerX + right + front
+            p2m.y = intSectY + res*jj2*sin(intSectTh + (M_PI/2)) - res*i*sin(intSectTh);  //centerY + right + front
+            jj2++;
+            if ((abs(p2m.x) > lenX) || (abs(p2m.y) > lenY))
+              break;
+            }
+            while(!newMap.atPosition("elevation", {p2m.x, p2m.y})); //! means free cell
+            
+            jjj2Min = std::min(jj2,jjj2Min);
+
+            jj2 = 0;
+          }
+          
+          for(int i=0; i <= back3; i++) 
+          {
+            do{
+            p4m.x = intSectX - res*jj4*cos(intSectTh + (M_PI/2)) - res*i*cos(intSectTh);  //centerX + left + back
+            p4m.y = intSectY - res*jj4*sin(intSectTh + (M_PI/2)) - res*i*sin(intSectTh);  //centerY + left + back
+            jj4++;
+            if ((abs(p4m.x) > lenX) || (abs(p4m.y) > lenY))
+              break;
+            }
+            while(!newMap.atPosition("elevation", {p4m.x, p4m.y})); //! means free cell
+            
+            jjj4Min = std::min(jj4,jjj4Min);
+            jj4 = 0;
+          }
+
+
+          
+
+          p2ooo.x = intSectX + res*std::min(jjj1Min,jjj2Min)*cos(intSectTh + (M_PI/2)) - res*back3*cos(intSectTh);  //centerX + right + back
+          p2ooo.y = intSectY + res*std::min(jjj1Min,jjj2Min)*sin(intSectTh + (M_PI/2)) - res*back3*sin(intSectTh);  //centerY + right + back
+
+          p4ooo.x = intSectX - res*std::min(jjj3Min,jjj4Min)*cos(intSectTh + (M_PI/2)) - res*back3*cos(intSectTh);  //centerX + left + back
+          p4ooo.y = intSectY - res*std::min(jjj3Min,jjj4Min)*sin(intSectTh + (M_PI/2)) - res*back3*sin(intSectTh);  //centerY + left + back
+
+          p1ooo.x = intSectX + res*std::min(jjj1Min,jjj2Min)*cos(intSectTh + (M_PI/2)) + res*front3*cos(intSectTh) ;  //centerX + right + front
+          p1ooo.y = intSectY + res*std::min(jjj1Min,jjj2Min)*sin(intSectTh + (M_PI/2)) + res*front3*sin(intSectTh) ;  //centerY + right + front
+ 
+          p3ooo.x = intSectX - res*std::min(jjj3Min,jjj4Min)*cos(intSectTh + (M_PI/2)) + res*front3*cos(intSectTh) ;  //centerX + left + front
+          p3ooo.y = intSectY - res*std::min(jjj3Min,jjj4Min)*sin(intSectTh + (M_PI/2)) + res*front3*sin(intSectTh) ;  //centerY + left + front
+
+
+
+
+
+          line_strip3.points.push_back(p1ooo);
+          line_strip3.points.push_back(p2ooo);
+          line_strip3.points.push_back(p4ooo);
+          line_strip3.points.push_back(p3ooo);
+          line_strip3.points.push_back(p1ooo);
+          arrowMarkers->markers.push_back(line_strip3);
+
+
 
           MarkersOut(arrowMarkers);
         }
