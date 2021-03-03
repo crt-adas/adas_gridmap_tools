@@ -12,15 +12,10 @@
 #include "geometry_msgs/Pose2D.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
+#include "geometry_msgs/PointStamped.h"
 
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
-
-
-
-typedef unsigned long int uintl;
-
-
 
 
 boost::shared_ptr<visualization_msgs::MarkerArray> arrowMarkers(new visualization_msgs::MarkerArray());
@@ -112,6 +107,56 @@ void pacManRect(int& MaxVal,const geometry_msgs::Pose2D& init, const int L, cons
 } 
 
 
+/** check if given point is inside any of three rectangle
+*  @param[in] point: the given point to check
+*  @param[in] center: a known point inside rectangle
+*  @param[in] p1_p2: two points on the line
+*/
+bool checkLine(const geometry_msgs::PointStamped& point,const geometry_msgs::Pose2D& center,
+  const geometry_msgs::Point& p1,const geometry_msgs::Point& p2)
+{
+  
+  bool signCenterSide = std::signbit((p2.x - p1.x) * (center.y - p1.y) - (center.x - p1.x) * (p2.y - p1.y)); //true = negative
+  bool signPointSide = std::signbit((p2.x - p1.x) * (point.point.y - p1.y) - (point.point.x - p1.x) * (p2.y - p1.y)); //true = negative 
+
+  if (signCenterSide == signPointSide) // check if center and point are in same side of line
+    return true;
+  else
+    return false;
+    
+}
+
+
+/** check if given point is inside any of three rectangle
+*  @param[in] point: the given point to check
+*  @param[in] center: a known point inside rectangle
+*  @param[in] p1_p4: cordinates four edges of rectangle
+*/
+bool CheckPoint(const geometry_msgs::PointStamped& point,const geometry_msgs::Pose2D& center,
+  const geometry_msgs::Point& p1,const geometry_msgs::Point& p2,const geometry_msgs::Point& p3,const geometry_msgs::Point& p4)
+{
+  bool line1 = checkLine(point,center,p1,p2); //true = on the correct side 
+  bool line2 = checkLine(point,center,p2,p4);
+  bool line3 = checkLine(point,center,p4,p3);
+  bool line4 = checkLine(point,center,p3,p1);
+  if(line1 && line2 && line3 && line4)
+    return true;
+  else
+    return false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 int main(int argc, char **argv)
 {
@@ -129,6 +174,9 @@ int main(int argc, char **argv)
   auto occupancyGridIn = nh.Input<OccupancyGrid>("/occupancy_map_filtered");
   auto gridMapOut = nh.Output<grid_map_msgs::GridMap>("/grid_map");
   auto initPoseIn = nh.Input<geometry_msgs::PoseWithCovarianceStamped>("/initialpose");
+
+  auto pointIn = nh.Input<geometry_msgs::PointStamped>("/clicked_point");
+
   auto goalPoseIn = nh.Input<geometry_msgs::PoseStamped>("/move_base_simple/goal");
   auto MarkersOut = nh.Output<visualization_msgs::MarkerArray>("/gridmap_tools_marker_array");
   
@@ -169,20 +217,52 @@ int main(int argc, char **argv)
     
   double oldInitx = 0.0;
   double oldGoalx = 0.0;
+  double oldPointx = 0.0;
+
   PoseStamped poseArrowGoal, poseArrowInit;
   bool rectangleDone = false;
   bool initReceived = false;
   bool goalReceived = false;
+
+  Pose2D init, goal, inter;
+  Point p1o,p2o,p3o,p4o; // rectangle No.1 4points
+  Point p1oo,p2oo,p3oo,p4oo; // rectangle No.2 4points
+  Point p1ooo,p2ooo,p3ooo,p4ooo; // rectangle No.3 4points
 
   ::ros::Rate loop_rate(10);
   while (::ros::ok())
   {
     auto initPos = initPoseIn();
     auto goalPose = goalPoseIn();
-    
+    auto pointC = pointIn();
     bool ifInit;
     
-    
+
+
+    if(pointC.point.x != oldPointx)
+    {
+      if (!rectangleDone)
+      {
+        ROS_INFO_STREAM_ONCE("First enter the inial and final pose!");
+
+      }else
+      {
+        oldPointx = pointC.point.x;
+        bool inRecInit = CheckPoint(pointC,init,p1o,p2o,p3o,p4o); //true = inside the rectangle
+        bool inRecGoal = CheckPoint(pointC,goal,p1oo,p2oo,p3oo,p4oo); //true = inside the rectangle
+        bool inRecInter = CheckPoint(pointC,inter,p1ooo,p2ooo,p3ooo,p4ooo); //true = inside the rectangle
+        ROS_INFO_STREAM("rec1: "<< inRecInit<<" ,rec2: " <<inRecGoal<<" ,rec3: "<< inRecInter<<"");
+        if(inRecInit || inRecGoal || inRecInter)
+          ROS_INFO_STREAM("Point("<< pointC.point.x <<","<< pointC.point.y <<") is: INSIDE");
+        else
+          ROS_INFO_STREAM("Point("<< pointC.point.x <<","<< pointC.point.y <<") is: OUTSIDE");
+      }
+      
+
+    }
+
+
+
     if(initPos.pose.pose.position.x != oldInitx) // Check if new initial pose was received, publish the marker
     {      
       if(rectangleDone)  
@@ -229,12 +309,8 @@ int main(int argc, char **argv)
       getRecInfo(line_strip1);
       getRecInfo(line_strip2);
       getRecInfo(line_strip3);
-
-      Pose2D init, goal, inter;
-      //std::vector<Point> rec1, rec2 ,rec3;
-      Point p1o,p2o,p3o,p4o; // rectangle No.1 4points
-      Point p1oo,p2oo,p3oo,p4oo; // rectangle No.2 4points
-      Point p1ooo,p2ooo,p3ooo,p4ooo; // rectangle No.3 4points
+      
+      
 
       float m1, c1, m2, c2; //1 = inital, 2 = goal
       int j1Min = std::numeric_limits<int>::max(), j2Min = j1Min, j3Min = j1Min, j4Min = j1Min;
@@ -245,8 +321,8 @@ int main(int argc, char **argv)
       float res = newMap.getResolution()*resScale;
       
 
-      float offsetFront = 5.9 + 1.2;
-      float offsetBack = 3;
+      float offsetFront = (5.9)/res; // in meters convert to res unit
+      float offsetBack = (2)/res;           //in meters convert to res unit
       
       init.x = poseArrowInit.pose.position.x;
       init.y = poseArrowInit.pose.position.y;
@@ -281,21 +357,23 @@ int main(int argc, char **argv)
           ROS_INFO_STREAM("Distance from goal pose to Intersection: " << goalL*res << " m");
           
           
-         
+          // Inital rectangle
           pacManRect(j1Min, init, initL, newMap, res, true, true); //center + right + front
           pacManRect(j3Min, init, initL, newMap, res, false, true); //center + left + front
-        
-          p1o.x = init.x + res*j1Min*cos(init.theta + (M_PI/2)) + res*initL*cos(init.theta);  //centerX + right + front
-          p1o.y = init.y + res*j1Min*sin(init.theta + (M_PI/2)) + res*initL*sin(init.theta);  //centerY + right + front
+          pacManRect(j2Min, init, offsetBack, newMap, res, true, false); //center + right + back
+          pacManRect(j4Min, init, offsetBack, newMap, res, false, false); //center + left + back
 
-          p3o.x = init.x - res*j3Min*cos(init.theta + (M_PI/2)) + res*initL*cos(init.theta);  //centerX + left + front
-          p3o.y = init.y - res*j3Min*sin(init.theta + (M_PI/2)) + res*initL*sin(init.theta);  //centerY + left + front
+          p1o.x = init.x + res*std::min(j1Min,j2Min)*cos(init.theta + (M_PI/2)) + res*initL*cos(init.theta);  //centerX + right + front
+          p1o.y = init.y + res*std::min(j1Min,j2Min)*sin(init.theta + (M_PI/2)) + res*initL*sin(init.theta);  //centerY + right + front
 
-          p2o.x = init.x + res*j1Min*cos(init.theta + (M_PI/2)) ;  //centerX + right 
-          p2o.y = init.y + res*j1Min*sin(init.theta + (M_PI/2)) ;  //centerY + right 
+          p3o.x = init.x - res*std::min(j3Min,j4Min)*cos(init.theta + (M_PI/2)) + res*initL*cos(init.theta);  //centerX + left + front
+          p3o.y = init.y - res*std::min(j3Min,j4Min)*sin(init.theta + (M_PI/2)) + res*initL*sin(init.theta);  //centerY + left + front
 
-          p4o.x = init.x - res*j3Min*cos(init.theta + (M_PI/2)) ;  //centerX + left 
-          p4o.y = init.y - res*j3Min*sin(init.theta + (M_PI/2)) ;  //centerY + left 
+          p2o.x = init.x + res*std::min(j1Min,j2Min)*cos(init.theta + (M_PI/2)) - res*offsetBack*cos(init.theta);  //centerX + right + back 
+          p2o.y = init.y + res*std::min(j1Min,j2Min)*sin(init.theta + (M_PI/2)) - res*offsetBack*sin(init.theta);  //centerY + right + back 
+ 
+          p4o.x = init.x - res*std::min(j3Min,j4Min)*cos(init.theta + (M_PI/2)) - res*offsetBack*cos(init.theta);  //centerX + left + back 
+          p4o.y = init.y - res*std::min(j3Min,j4Min)*sin(init.theta + (M_PI/2)) - res*offsetBack*sin(init.theta);  //centerY + left + back 
 
           line_strip1.points.push_back(p1o);
           line_strip1.points.push_back(p2o);
@@ -305,21 +383,23 @@ int main(int argc, char **argv)
           arrowMarkers->markers.push_back(line_strip1);
 
 
-
+          //final rectangle
           pacManRect(jj2Min, goal, goalL, newMap, res, true, false); //center + right + back
           pacManRect(jj4Min, goal, goalL, newMap, res, false, false); //center + left + back
+          pacManRect(jj1Min, goal, offsetFront, newMap, res, true, true); //center + right + front
+          pacManRect(jj3Min, goal, offsetFront, newMap, res, false, true); //center + left + front
 
-          p2oo.x = goal.x + res*jj2Min*cos(goal.theta + (M_PI/2)) - res*goalL*cos(goal.theta);  //centerX + right + back
-          p2oo.y = goal.y + res*jj2Min*sin(goal.theta + (M_PI/2)) - res*goalL*sin(goal.theta);  //centerY + right + back
+          p2oo.x = goal.x + res*std::min(jj1Min,jj2Min)*cos(goal.theta + (M_PI/2)) - res*goalL*cos(goal.theta);  //centerX + right + back
+          p2oo.y = goal.y + res*std::min(jj1Min,jj2Min)*sin(goal.theta + (M_PI/2)) - res*goalL*sin(goal.theta);  //centerY + right + back
 
-          p4oo.x = goal.x - res*jj4Min*cos(goal.theta + (M_PI/2)) - res*goalL*cos(goal.theta);  //centerX + left + back
-          p4oo.y = goal.y - res*jj4Min*sin(goal.theta + (M_PI/2)) - res*goalL*sin(goal.theta);  //centerY + left + back
+          p4oo.x = goal.x - res*std::min(jj3Min,jj4Min)*cos(goal.theta + (M_PI/2)) - res*goalL*cos(goal.theta);  //centerX + left + back
+          p4oo.y = goal.y - res*std::min(jj3Min,jj4Min)*sin(goal.theta + (M_PI/2)) - res*goalL*sin(goal.theta);  //centerY + left + back
 
-          p1oo.x = goal.x + res*jj2Min*cos(goal.theta + (M_PI/2)) ;  //centerX + right 
-          p1oo.y = goal.y + res*jj2Min*sin(goal.theta + (M_PI/2)) ;  //centerY + right 
-
-          p3oo.x = goal.x - res*jj4Min*cos(goal.theta + (M_PI/2)) ;  //centerX + left 
-          p3oo.y = goal.y - res*jj4Min*sin(goal.theta + (M_PI/2)) ;  //centerY + left 
+          p1oo.x = goal.x + res*std::min(jj1Min,jj2Min)*cos(goal.theta + (M_PI/2)) + res*offsetFront*cos(goal.theta);  //centerX + right + front 
+          p1oo.y = goal.y + res*std::min(jj1Min,jj2Min)*sin(goal.theta + (M_PI/2)) + res*offsetFront*sin(goal.theta);  //centerY + right + front 
+ 
+          p3oo.x = goal.x - res*std::min(jj3Min,jj4Min)*cos(goal.theta + (M_PI/2)) + res*offsetFront*cos(goal.theta);  //centerX + left + front 
+          p3oo.y = goal.y - res*std::min(jj3Min,jj4Min)*sin(goal.theta + (M_PI/2)) + res*offsetFront*sin(goal.theta);  //centerY + left + front 
 
           line_strip2.points.push_back(p1oo);
           line_strip2.points.push_back(p2oo);
@@ -329,7 +409,7 @@ int main(int argc, char **argv)
           arrowMarkers->markers.push_back(line_strip2);
 
 
-
+          //Intersection rectangle
           inter.theta = ((goal.theta - init.theta)/2) + init.theta;
           int front3 = std::min(j3Min,jj2Min);
           int back3 = std::min(j1Min,jj4Min);
@@ -358,9 +438,16 @@ int main(int argc, char **argv)
           line_strip3.points.push_back(p1ooo);
           arrowMarkers->markers.push_back(line_strip3);
 
-
-
           MarkersOut(arrowMarkers);
+
+
+
+
+
+
+
+
+
         }
 
       }
