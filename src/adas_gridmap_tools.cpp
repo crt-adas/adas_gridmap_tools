@@ -67,7 +67,49 @@ void sendArrow(const geometry_msgs::PoseStamped& arrowPose, bool init)
 }
 
 
+// □□□□□□□▧▧▧▧▧▧▧
+// □□□□□□□▧▧▧▧▧▧▧
+// □□□□□□□▧▧▧▧▧▧▧
+// ▧▧▧▧▧▧▧▧▧▧▧▧▧▧
+// ▧▧▧▧▧▧▧▧▧▧▧▧▧▧
+// ▧▧▧▧▧▧▧▧▧▧▧▧▧▧
+/** Scan the gridmap to find biggest vertex of rectangle, check how big can the rectangle expand in direction of empty cubes in shape above.
+*  @param[out] MaxVal: return value in res unit 
+*  @param[in] init: pose of origin of rectangle (not center necceserly), 
+*  @param[in] L: length of the line to scan along 
+*  @param[in] newMap: map
+*  @param[in] res: map resolution, or size of each step in scanning the map in meters 
+*  @param[in] right: true = scan right side of pose, false = scan left side of pose.
+*  @param[in] front: true = scan front side of pose, false = scan back side of pose.
+*/
+void pacManRect(int& MaxVal,const geometry_msgs::Pose2D& init, const int L, const grid_map::GridMap& newMap,const float res, bool right, bool front)
+{
+  int safetyDis = 2 ; //push back the rectangle from obstacle in res units for safety
+  geometry_msgs::Point p;
+  int r = right ? +1 : -1; //sign of direction toward right or left relative to pose
+  int f = front ? +1 : -1; //sign of direction toward front or back relative to pose
+  int j = 0;
+  float lenX = (newMap.getLength().x() - 1)/2; //get cordinates of 
+  float lenY = (newMap.getLength().y() - 1)/2;
+  
+  for(int i=0; i <= L; i++) //for the length between pose and intersection by res steps 
+  {
+    do{ // expand to right or left until obstacle or end of map, then break
+    p.x = init.x + r*res*j*cos(init.theta + (M_PI/2)) + f*res*i*cos(init.theta);  //centerX + right + front
+    p.y = init.y + r*res*j*sin(init.theta + (M_PI/2)) + f*res*i*sin(init.theta);  //centerY + right + front
+    j++;
+    if ((abs(p.x) > lenX) || (abs(p.y) > lenY)) // break if end of map
+      break;
+    }
+    while(!newMap.atPosition("elevation", {p.x, p.y})); //while cell is obstacle free, false = free cell. 
 
+    MaxVal = std::min(MaxVal,j); //keep the shortest distance in res units to obstacle in every step forward
+    j = 0;
+  }
+  
+  MaxVal = MaxVal - safetyDis;
+
+} 
 
 
 
@@ -84,9 +126,6 @@ int main(int argc, char **argv)
 
   
   NodeHandle nh;
-  
-  
- 
   auto occupancyGridIn = nh.Input<OccupancyGrid>("/occupancy_map_filtered");
   auto gridMapOut = nh.Output<grid_map_msgs::GridMap>("/grid_map");
   auto initPoseIn = nh.Input<geometry_msgs::PoseWithCovarianceStamped>("/initialpose");
@@ -97,8 +136,6 @@ int main(int argc, char **argv)
   GridMap gridMap, newMap;
   std::string gridMapLayerName = "elevation";
   
-
-
 
   bool gridMapUpdated = false;
   while(!gridMapUpdated)
@@ -118,8 +155,8 @@ int main(int argc, char **argv)
         ROS_INFO_STREAM("Unknowns converted to free");
         if(GridMapRosConverter::fromOccupancyGrid(grid, gridMapLayerName, gridMap))
         {                
-//               GridMapCvProcessing::changeResolution(gridMap, newMap, 0.3);
-//                newMap.setPosition(Position(0.0, 0.0));
+            //GridMapCvProcessing::changeResolution(gridMap, newMap, 0.3);
+            //newMap.setPosition(Position(0.0, 0.0));
             bool succ;
             newMap = gridMap.getSubmap(Position(0.0, 0.0), Length(80, 80), succ);
             GridMapRosConverter::toMessage(newMap, *gridMapMsg);
@@ -132,9 +169,8 @@ int main(int argc, char **argv)
     
   double oldInitx = 0.0;
   double oldGoalx = 0.0;
+  PoseStamped poseArrowGoal, poseArrowInit;
   bool rectangleDone = false;
-  PoseStamped poseArrowGoal;
-  PoseStamped poseArrowInit;
   bool initReceived = false;
   bool goalReceived = false;
 
@@ -147,12 +183,10 @@ int main(int argc, char **argv)
     bool ifInit;
     
     
-
-    if(initPos.pose.pose.position.x != oldInitx)
+    if(initPos.pose.pose.position.x != oldInitx) // Check if new initial pose was received, publish the marker
     {      
       if(rectangleDone)  
       {
-        arrowMarkers->markers.clear();
         rectangleDone = false;
       }
       ROS_INFO_STREAM("Initial Pose Received!");
@@ -164,11 +198,10 @@ int main(int argc, char **argv)
       MarkersOut(arrowMarkers);
     }
 
-    if(goalPose.pose.position.x != oldGoalx)
+    if(goalPose.pose.position.x != oldGoalx) // Check if new final pose was received, publish the marker
     {    
       if(rectangleDone)  
       {
-        arrowMarkers->markers.clear();
         rectangleDone = false;
       }               
       ROS_INFO_STREAM("Goal Pose Received!");
@@ -181,7 +214,7 @@ int main(int argc, char **argv)
 
     }
 
-    if( goalReceived && !initReceived)
+    if( goalReceived && !initReceived) 
       ROS_INFO_STREAM_ONCE("Waiting for Inital pose... ");
 
     if( !goalReceived && initReceived)
@@ -189,7 +222,7 @@ int main(int argc, char **argv)
 
 
 
-    if(goalReceived && initReceived)
+    if(goalReceived && initReceived) //if both inital and final pose received
     {
       
       Marker line_strip1, line_strip2, line_strip3 ;
@@ -198,23 +231,23 @@ int main(int argc, char **argv)
       getRecInfo(line_strip3);
 
       Pose2D init, goal, inter;
-      Point p;
-      std::vector<Point> rec1, rec2 ,rec3;
-      Point p1o,p2o,p3o,p4o;
-      Point p1oo,p2oo,p3oo,p4oo;
-      Point p1ooo,p2ooo,p3ooo,p4ooo;
+      //std::vector<Point> rec1, rec2 ,rec3;
+      Point p1o,p2o,p3o,p4o; // rectangle No.1 4points
+      Point p1oo,p2oo,p3oo,p4oo; // rectangle No.2 4points
+      Point p1ooo,p2ooo,p3ooo,p4ooo; // rectangle No.3 4points
 
       float m1, c1, m2, c2; //1 = inital, 2 = goal
-      
-      int j = 0;
       int j1Min = std::numeric_limits<int>::max(), j2Min = j1Min, j3Min = j1Min, j4Min = j1Min;
       int jj1Min = std::numeric_limits<int>::max(), jj2Min = jj1Min, jj3Min = jj1Min, jj4Min = jj1Min;
       int jjj1Min = std::numeric_limits<int>::max(), jjj2Min = jjj1Min, jjj3Min = jjj1Min, jjj4Min = jjj1Min;
 
-      float res = newMap.getResolution();
-      float lenX = (newMap.getLength().x() - 1)/2;
-      float lenY = (newMap.getLength().y() - 1)/2;
+      float resScale = 0.9; // between 0.0 -> 1.0 , not needed, but just to be sure all cells are checked.
+      float res = newMap.getResolution()*resScale;
+      
 
+      float offsetFront = 5.9 + 1.2;
+      float offsetBack = 3;
+      
       init.x = poseArrowInit.pose.position.x;
       init.y = poseArrowInit.pose.position.y;
       init.theta = tf::getYaw(poseArrowInit.pose.orientation);
@@ -223,6 +256,8 @@ int main(int argc, char **argv)
       goal.y = poseArrowGoal.pose.position.y;
       goal.theta = tf::getYaw(poseArrowGoal.pose.orientation);
 
+      
+      //calculating intersection between init and final pose
       m1 = tan(init.theta);
       c1 = init.y - ( m1 * init.x);
       m2 = tan(goal.theta);
@@ -240,43 +275,16 @@ int main(int argc, char **argv)
           ROS_INFO_STREAM("Intersection is not collision free!");
         else
         {
-          uintl initL = sqrt(pow(inter.x - init.x, 2) +  pow(inter.y - init.y, 2))/res ; // Distance in res units
+          int initL = sqrt(pow(inter.x - init.x, 2) +  pow(inter.y - init.y, 2))/res ; // Distance in res units
           ROS_INFO_STREAM("Distance from inital pose to Intersection: " << initL*res << " m");
-          uintl goalL = sqrt(pow(inter.x - goal.x, 2) +  pow(inter.y - goal.y, 2))/res ; // Distance in res units
+          int goalL = sqrt(pow(inter.x - goal.x, 2) +  pow(inter.y - goal.y, 2))/res ; // Distance in res units
           ROS_INFO_STREAM("Distance from goal pose to Intersection: " << goalL*res << " m");
-
-
-          for(int i=0; i <= initL; i++) 
-          {
-            do{
-            p.x = init.x + res*j*cos(init.theta + (M_PI/2)) + res*i*cos(init.theta);  //centerX + right + front
-            p.y = init.y + res*j*sin(init.theta + (M_PI/2)) + res*i*sin(init.theta);  //centerY + right + front
-            j++;
-            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
-              break;
-            }
-            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
-
-            j1Min = std::min(j1Min,j);
-            j = 0;
-          }
           
-          for(int i=0; i <= initL; i++) 
-          {
-            do{
-            p.x = init.x - res*j*cos(init.theta + (M_PI/2)) + res*i*cos(init.theta);  //centerX + left + front
-            p.y = init.y - res*j*sin(init.theta + (M_PI/2)) + res*i*sin(init.theta);  //centerY + left + front
-            j++;
-            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
-              break;
-            }
-            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
-
-            j3Min = std::min(j3Min,j);
-            j = 0;
-          }
-
           
+         
+          pacManRect(j1Min, init, initL, newMap, res, true, true); //center + right + front
+          pacManRect(j3Min, init, initL, newMap, res, false, true); //center + left + front
+        
           p1o.x = init.x + res*j1Min*cos(init.theta + (M_PI/2)) + res*initL*cos(init.theta);  //centerX + right + front
           p1o.y = init.y + res*j1Min*sin(init.theta + (M_PI/2)) + res*initL*sin(init.theta);  //centerY + right + front
 
@@ -298,38 +306,8 @@ int main(int argc, char **argv)
 
 
 
-          for(int i=0; i <= goalL; i++) 
-          {
-            
-            do{
-            p.x = goal.x + res*j*cos(goal.theta + (M_PI/2)) - res*i*cos(goal.theta);  //centerX + right + front
-            p.y = goal.y + res*j*sin(goal.theta + (M_PI/2)) - res*i*sin(goal.theta);  //centerY + right + front
-            j++;
-            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
-              break;
-            }
-            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
-            
-            jj2Min = std::min(jj2Min,j);
-            j = 0;
-          }
-          
-          for(int i=0; i <= goalL; i++) 
-          {
-            do{
-            p.x = goal.x - res*j*cos(goal.theta + (M_PI/2)) - res*i*cos(goal.theta);  //centerX + left + back
-            p.y = goal.y - res*j*sin(goal.theta + (M_PI/2)) - res*i*sin(goal.theta);  //centerY + left + back
-            j++;
-            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
-              break;
-            }
-            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
-
-            jj4Min = std::min(jj4Min,j);
-            j = 0;
-          }
-
-          
+          pacManRect(jj2Min, goal, goalL, newMap, res, true, false); //center + right + back
+          pacManRect(jj4Min, goal, goalL, newMap, res, false, false); //center + left + back
 
           p2oo.x = goal.x + res*jj2Min*cos(goal.theta + (M_PI/2)) - res*goalL*cos(goal.theta);  //centerX + right + back
           p2oo.y = goal.y + res*jj2Min*sin(goal.theta + (M_PI/2)) - res*goalL*sin(goal.theta);  //centerY + right + back
@@ -343,8 +321,6 @@ int main(int argc, char **argv)
           p3oo.x = goal.x - res*jj4Min*cos(goal.theta + (M_PI/2)) ;  //centerX + left 
           p3oo.y = goal.y - res*jj4Min*sin(goal.theta + (M_PI/2)) ;  //centerY + left 
 
-
-
           line_strip2.points.push_back(p1oo);
           line_strip2.points.push_back(p2oo);
           line_strip2.points.push_back(p4oo);
@@ -353,77 +329,15 @@ int main(int argc, char **argv)
           arrowMarkers->markers.push_back(line_strip2);
 
 
+
           inter.theta = ((goal.theta - init.theta)/2) + init.theta;
+          int front3 = std::min(j3Min,jj2Min);
+          int back3 = std::min(j1Min,jj4Min);
 
-          uintl front3 = std::min(j3Min,jj2Min);
-          uintl back3 = std::min(j1Min,jj4Min);
-
-          
-
-          for(int i =0; i <= front3; i++) 
-          {
-            do{
-            p.x = inter.x + res*j*cos(inter.theta + (M_PI/2)) + res*i*cos(inter.theta);  //centerX + right + front
-            p.y = inter.y + res*j*sin(inter.theta + (M_PI/2)) + res*i*sin(inter.theta);  //centerY + right + front
-            j++;
-            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
-              break;
-            }
-            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
-            
-            jjj1Min = std::min(jjj1Min,j);
-            j = 0;
-          }
-          
-          for(int i =0; i <= front3; i++) 
-          {
-            do{
-            p.x = inter.x - res*j*cos(inter.theta + (M_PI/2)) + res*i*cos(inter.theta);  //centerX + left + front
-            p.y = inter.y - res*j*sin(inter.theta + (M_PI/2)) + res*i*sin(inter.theta);  //centerY + left + front
-            j++;
-            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
-              break;
-            }
-            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
-            
-            jjj3Min = std::min(jjj3Min,j);
-            j = 0;
-          }
-
-          for(int i =0; i <= back3; i++) 
-          {
-            
-            do{
-            p.x = inter.x + res*j*cos(inter.theta + (M_PI/2)) - res*i*cos(inter.theta);  //centerX + right + front
-            p.y = inter.y + res*j*sin(inter.theta + (M_PI/2)) - res*i*sin(inter.theta);  //centerY + right + front
-            j++;
-            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
-              break;
-            }
-            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
-            
-            jjj2Min = std::min(j,jjj2Min);
-
-            j = 0;
-          }
-          
-          for(int i=0; i <= back3; i++) 
-          {
-            do{
-            p.x = inter.x - res*j*cos(inter.theta + (M_PI/2)) - res*i*cos(inter.theta);  //centerX + left + back
-            p.y = inter.y - res*j*sin(inter.theta + (M_PI/2)) - res*i*sin(inter.theta);  //centerY + left + back
-            j++;
-            if ((abs(p.x) > lenX) || (abs(p.y) > lenY))
-              break;
-            }
-            while(!newMap.atPosition("elevation", {p.x, p.y})); //! means free cell
-            
-            jjj4Min = std::min(j,jjj4Min);
-            j = 0;
-          }
-
-
-          
+          pacManRect(jjj1Min, inter, front3, newMap, res, true, true); //center + right + front
+          pacManRect(jjj3Min, inter, front3, newMap, res, false, true); //center + left + front
+          pacManRect(jjj2Min, inter, back3, newMap, res, true, false); //center + right + back
+          pacManRect(jjj4Min, inter, back3, newMap, res, false, false); //center + left + back
 
           p2ooo.x = inter.x + res*std::min(jjj1Min,jjj2Min)*cos(inter.theta + (M_PI/2)) - res*back3*cos(inter.theta);  //centerX + right + back
           p2ooo.y = inter.y + res*std::min(jjj1Min,jjj2Min)*sin(inter.theta + (M_PI/2)) - res*back3*sin(inter.theta);  //centerY + right + back
@@ -436,10 +350,6 @@ int main(int argc, char **argv)
  
           p3ooo.x = inter.x - res*std::min(jjj3Min,jjj4Min)*cos(inter.theta + (M_PI/2)) + res*front3*cos(inter.theta) ;  //centerX + left + front
           p3ooo.y = inter.y - res*std::min(jjj3Min,jjj4Min)*sin(inter.theta + (M_PI/2)) + res*front3*sin(inter.theta) ;  //centerY + left + front
-
-
-
-
 
           line_strip3.points.push_back(p1ooo);
           line_strip3.points.push_back(p2ooo);
