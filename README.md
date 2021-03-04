@@ -1,1 +1,2 @@
 # adas_gridmap_tools
+This ROS node subscribes to occupancygrid convert to gridmap, using Rviz goal and state estimate indicator it is possible to send the initial and final pose of the robot, node computes 3 obstacle free rectangle between initial and final pose, then using point indicator in Rviz it checks if each given point is inside the rectangle or not which later can be use for path planning and and obstacle avoidance algorithms.
